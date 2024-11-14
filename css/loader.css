@@ -1,0 +1,18 @@
+body {
+    display: inline-flex;
+    height: 100vh;
+}
+
+.loader {
+    border: 5px solid #e7e7e7;
+    border-top: 6px solid #007A81;
+    border-radius: 50%;
+    width: 20px; /* Ancho de la barra */
+    height: 20px; /* Alto de la barra */
+    animation: spin 1.7s linear infinite; /* Velocidad de animacion */
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    50% { transform: rotate(360deg); }
+}
