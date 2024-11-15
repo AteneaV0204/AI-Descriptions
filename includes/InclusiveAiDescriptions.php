@@ -4,7 +4,7 @@ class InclusiveAiDescriptions {
 
     //Variables
     private static $instance;
-    private $ApiKey = 'This is private';
+    private $ApiKey = 'Is still private';
     private $model = 'gpt-4o';
     private $postId;
 
@@ -26,18 +26,22 @@ class InclusiveAiDescriptions {
     //Renders a button that generates an AI-based description for the image
     public function print_button($field) {
          if ($field['_name'] === 'descripcion_ia' && is_admin()) {
-            echo '<br/><button type="button" id="ai_desciption_button" name="ai_description_button"
-                class="button button-primary">Generar descripcion de imagen</button>';
+            echo '<br/><span id="saving-easyread" class="loader saving"></span>
+                <button type="button" id="ai_description_button" name="ai_description_button"
+                    class="button button-primary">Generar descripcion de imagen</button>';
         }
     }
 
     //Generates a description of the image
     public function ai_gen_description() {
-        $params = $_POST;
-        $ogImg = isset($params['og']) ? $params['og'] : '';
+        $postId = get_the_ID();
+        $imgData = wp_get_attachment_image_src(get_post_thumbnail_id($postId), 'full');
+        $imgUrl = $imgData ? $imgData[0] : '';
+
+        /*$params = $_POST;
+        $ogImg = isset($params['og']) ? $params['og'] : '';*/
 
         try {
-
             $url = 'https://api.openai.com/v1/chat/completions';
             $key = self::$apiKey;
             $body = '{
@@ -58,7 +62,7 @@ class InclusiveAiDescriptions {
                         {
                             "type": "image_url",
                             "image_url": {
-                                "url": "' . $ogImg . '"
+                                "url": "' . $imgUrl . '"
                             }
                         }]
                     }]
@@ -101,6 +105,17 @@ class InclusiveAiDescriptions {
         curl_close($curl);
 
         return $result;
+    }
+
+    // Enqueue the JavaScript file only when we're on the post edit screen
+    public function enqueue_scripts()
+    {
+        if (in_array(get_post_type(), self::$post_types)) {
+            wp_register_style('ai-css', plugins_url('inclusive-ai-descriptions/css/loader.css'));
+            wp_enqueue_style('ai-css');
+
+            wp_enqueue_script('ai-js', plugins_url('inclusive-ai-descriptions/js/inclusive_ai.js'), array('jquery'), '1.0', true);
+        }
     }
 
 }

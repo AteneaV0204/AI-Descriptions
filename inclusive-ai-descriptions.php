@@ -9,7 +9,7 @@
     */
     
     //Load the main class
-    require_once plugin_dir_path(__FILE__) . 'includes/inclusive-ai.php';
+    require_once plugin_dir_path(__FILE__) . 'includes/InclusiveAiDescriptions.php';
 
     //Init
     add_action('plugins_loaded', array('InclusiveAiDescriptions', 'get_instance'));
