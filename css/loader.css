@@ -1,10 +1,10 @@
 .loader {
-    border: 5px solid #e7e7e7;
-    border-top: 6px solid #007A81;
+    border: 4px solid #e7e7e7;
+    border-top: 5px solid #007A81;
     border-radius: 50%;
     display: none;
-    width: 20px; /* Ancho de la barra */
-    height: 20px; /* Alto de la barra */
+    width: 15px; /* Ancho de la barra */
+    height: 15px; /* Alto de la barra */
     animation: spin 1.7s linear infinite; /* Velocidad de animacion */
 }
 
