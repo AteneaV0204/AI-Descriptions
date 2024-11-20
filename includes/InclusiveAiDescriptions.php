@@ -4,9 +4,10 @@ class InclusiveAiDescriptions {
 
     //Variables
     private static $instance;
-    private $apiKey = 'Just a key';
-    private $model = 'gpt-4o';
-    private $postId;
+    private static $post_type = 'fotografia';
+    private static $apiKey = 'I AM ERROR';
+    private static $model = 'gpt-4o';
+    private $imgUrl;
 
     //Function for singleton instances
     public static function get_instance() {
@@ -55,9 +56,17 @@ class InclusiveAiDescriptions {
                             "role": "system",
                             "content": "Eres una herramienta de descripcion de imagenes para personas ciegas. Las imagenes que recibes son de un concurso de fotografia sobre la vida con discapacidad y tu labor se corresponde a describirlas muy detalladamente para personas con problemas visuales. Si hay alguna persona con discapacidad, debes incluirlo en la descripcion y decir cual es: fisica, intelectual, auditiva, visual, paralisis cerebral, sordoceguera, problemas de lenguaje, esclerosis multiple, lesion  cerebral o parkinson. Tambien intenta distinguir si la persona tiene problemas de salud mental, autismo. Si la persona tiene Sindrome de Down no digas que tiene discapacidad intelectual. Di tambien si la imagen corresponde a un retrato y el tema que aborda como trabajo, deporte, ocio, salud, accesibilidad, salud, rehabilitacion, educacion, empleo, servicios sociales, turismo, cultura, vivienda o ayudas tecnicas. Valora sobre todo la cara para determinar el tipo de discapacidad"
                         },
-                        {
-                            "role": "user",
-                            "content": "Describe la siguiente imagen:' . $imgUrl . '"
+                        {"role": "user", "content": [
+                            {
+                                "type": "text",
+                                "text": "Describe la siguiente imagen"
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": "' . $this->imgUrl . '"
+                                }
+                           }]
                         }
                     ]}';
             echo $this->GPTRequest($url, $key, $body);
@@ -107,6 +116,9 @@ class InclusiveAiDescriptions {
             wp_enqueue_style('ai-css');
 
             wp_enqueue_script('ai-js', plugins_url('inclusive-ai-descriptions/js/inclusive_ai.js'), array('jquery'), '1.0', true);
+            wp_localize_script('ai-js', 'imageUrl', array(
+                'imgUrl' => $this->imgUrl,
+            ));
         }
     }
 

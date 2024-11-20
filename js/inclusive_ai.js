@@ -1,16 +1,17 @@
 jQuery(document).ready(function($) {
     $(document).on("click", "#ai_description_button", function () {
         var button = $(this);
-        var description = $("textarea[name='acf[field_6731f5a2ecd8f]']").attr('src');
+        var description = $("textarea[name='acf[field_6731f5a2ecd8f]']").val();
 
         $('#saving-description').css('display', 'inline-block');
         button.hide();
 
-        // Petición AJAX para la generación del título resumido
+        //AJAX for the description
         var params = {
             'action': 'ai-gen-description',
             'og': description,
-            'img_url': imgUrl
+            'post_id': postID,
+            'img_url': imageUrl.imgUrl
         };
 
         $.ajax({
