@@ -5,9 +5,8 @@ class InclusiveAiDescriptions {
     //Variables
     private static $instance;
     private static $post_type = 'fotografia';
-    private static $apiKey = 'roxas';
+    private static $apiKey = 'buy one urself';
     private static $model = 'gpt-4o';
-    private $imgUrl;
 
     //Function for singleton instances
     public static function get_instance() {
@@ -39,10 +38,9 @@ class InclusiveAiDescriptions {
         if (isset($_POST['post_id'])) {
             $post_id = intval($_POST['post_id']);
         }
-
-        $imgData = wp_get_attachment_image_src(get_post_thumbnail_id($post_id), 'full');
+        $imagen = get_post_thumbnail_id($post_id);
+        $imgData = wp_get_attachment_image_src($imagen, 'full');
         $imgUrl = $imgData ? $imgData[0] : '';
-
 
         try {
             $url = 'https://api.openai.com/v1/chat/completions';
@@ -64,7 +62,7 @@ class InclusiveAiDescriptions {
                             {
                                 "type": "image_url",
                                 "image_url": {
-                                    "url": "' . $this->imgUrl . '"
+                                    "url": "' . $imgUrl . '"
                                 }
                            }]
                         }
@@ -74,7 +72,7 @@ class InclusiveAiDescriptions {
         } catch (\Exception $e) {
             echo "No se ha podido procesar la imagen. Inténtelo en unos minutos.";
         }
-        exit(0);
+        exit();
     }
 
     //Makes a request for GPT to describe the image

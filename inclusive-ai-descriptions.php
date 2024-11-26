@@ -4,7 +4,7 @@
     * Plugin URI: https://fotografiadiscapacidad.usal.es/
     * Description: An AI-powered implementation of ChatGPT for generating image descriptions to enhance accessibility.
     * Author: Atenea Vadillo
-    * Version: 0.1
+    * Version: 1.0
     * Author URI: https://github.com/AteneaV0204
     */
     
