@@ -5,7 +5,7 @@ class InclusiveAiDescriptions {
     //Variables
     private static $instance;
     private static $post_type = 'fotografia';
-    private static $apiKey = 'I AM ERROR';
+    private static $apiKey = 'roxas';
     private static $model = 'gpt-4o';
     private $imgUrl;
 
@@ -36,14 +36,13 @@ class InclusiveAiDescriptions {
 
     //Generates a description of the image
     public function ai_gen_description() {
-        $postId = get_the_ID();
-        $imgData = wp_get_attachment_image_src(get_post_thumbnail_id($postId), 'full');
+        if (isset($_POST['post_id'])) {
+            $post_id = intval($_POST['post_id']);
+        }
+
+        $imgData = wp_get_attachment_image_src(get_post_thumbnail_id($post_id), 'full');
         $imgUrl = $imgData ? $imgData[0] : '';
 
-        $params = [
-            'og' => isset($_POST['og']) ? $_POST['og'] : '',
-            'img_url' => $imgUrl
-        ];
 
         try {
             $url = 'https://api.openai.com/v1/chat/completions';
@@ -56,7 +55,8 @@ class InclusiveAiDescriptions {
                             "role": "system",
                             "content": "Eres una herramienta de descripcion de imagenes para personas ciegas. Las imagenes que recibes son de un concurso de fotografia sobre la vida con discapacidad y tu labor se corresponde a describirlas muy detalladamente para personas con problemas visuales. Si hay alguna persona con discapacidad, debes incluirlo en la descripcion y decir cual es: fisica, intelectual, auditiva, visual, paralisis cerebral, sordoceguera, problemas de lenguaje, esclerosis multiple, lesion  cerebral o parkinson. Tambien intenta distinguir si la persona tiene problemas de salud mental, autismo. Si la persona tiene Sindrome de Down no digas que tiene discapacidad intelectual. Di tambien si la imagen corresponde a un retrato y el tema que aborda como trabajo, deporte, ocio, salud, accesibilidad, salud, rehabilitacion, educacion, empleo, servicios sociales, turismo, cultura, vivienda o ayudas tecnicas. Valora sobre todo la cara para determinar el tipo de discapacidad"
                         },
-                        {"role": "user", "content": [
+                        {
+                            "role": "user", "content": [
                             {
                                 "type": "text",
                                 "text": "Describe la siguiente imagen"
@@ -116,9 +116,6 @@ class InclusiveAiDescriptions {
             wp_enqueue_style('ai-css');
 
             wp_enqueue_script('ai-js', plugins_url('inclusive-ai-descriptions/js/inclusive_ai.js'), array('jquery'), '1.0', true);
-            wp_localize_script('ai-js', 'imageUrl', array(
-                'imgUrl' => $this->imgUrl,
-            ));
         }
     }
 
