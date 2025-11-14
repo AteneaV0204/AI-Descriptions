@@ -1,5 +1,5 @@
 # Inclusive AI Descriptions
-A WordPress plugin that generates accessible image descriptions for people with visual impairments using OpenAI's GPT-4 vision capabilities. This plugin was specifically created for [Fotografia USAL](https://fotografiadiscapacidad.usal.es/) to enhance accessibility in photography contests focused on disability awareness.
+A WordPress plugin that generates accessible image descriptions for people with visual impairments using OpenAI's GPT-4 vision capabilities. This plugin was specifically created for [Fotografia Discapacidad INICO](https://fotografiadiscapacidad.usal.es/) to enhance accessibility in photography contests focused on disability awareness.
 
 ## Features
 - 🤖 AI-Powered Descriptions: Uses OpenAI's GPT-4 to generate detailed, context-aware image descriptions
