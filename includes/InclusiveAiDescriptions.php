@@ -5,7 +5,7 @@ class InclusiveAiDescriptions {
     //Variables
     private static $instance;
     private static $post_type = 'fotografia';
-    private static $apiKey = 'buy one urself';
+    private static $apiKey = 'aaaaaaaaaaa';
     private static $model = 'gpt-4o';
 
     //Function for singleton instances
@@ -24,6 +24,8 @@ class InclusiveAiDescriptions {
         add_action('admin_enqueue_scripts', array($this, 'enqueue_scripts'));
         add_action('admin_menu', array($this, 'add_batch_page'));
         add_action('wp_ajax_ai-gen-description-batch', array($this, 'ai_gen_description'));
+        add_action('wp_ajax_ai-save-batch-progress', array($this, 'save_batch_progress'));
+        add_action('wp_ajax_ai-reset-batch-progress', array($this, 'reset_batch_progress'));
     }
 
     //Renders a button that generates an AI-based description for the image
@@ -71,6 +73,13 @@ class InclusiveAiDescriptions {
                     ]}';
             echo $this->GPTRequest($url, $key, $body);
 
+            if ($response && !empty($response)) {
+                update_field('descripcion_ia', $response, $post_id);
+                echo $response;
+            } else {
+                echo "No se ha podido generar la descripción.";
+            }
+
         } catch (\Exception $e) {
             echo "No se ha podido procesar la imagen. Inténtelo en unos minutos.";
         }
@@ -109,6 +118,38 @@ class InclusiveAiDescriptions {
         return $result;
     }
 
+    // Función para guardar progreso del batch
+    public function save_batch_progress() {
+        check_ajax_referer('ai_save_batch', 'nonce');
+        
+        if (!isset($_POST['processed']) || !is_array($_POST['processed'])) {
+            wp_send_json_error('Datos de procesados no válidos');
+        }
+        
+        $processed_posts = array_map('intval', $_POST['processed']);
+        
+        $progress = array(
+            'processed' => $processed_posts,
+            'current_index' => isset($_POST['current_index']) ? intval($_POST['current_index']) : 0,
+            'successful' => isset($_POST['successful']) ? intval($_POST['successful']) : 0,
+            'failed' => isset($_POST['failed']) ? intval($_POST['failed']) : 0,
+            'last_update' => current_time('timestamp')
+        );
+        
+        update_option('ai_batch_progress', $progress, false);
+        
+        error_log('Progreso guardado: ' . count($processed_posts) . ' posts procesados');
+        wp_send_json_success(array('saved' => count($processed_posts)));
+    }
+
+    // Función para reiniciar progreso del batch
+    public function reset_batch_progress() {
+        check_ajax_referer('ai_reset_batch', 'nonce');
+        
+        delete_option('ai_batch_progress');
+        wp_send_json_success();
+    }
+
     // Enqueue the JavaScript file only when we're on the post edit screen
     public function enqueue_scripts() {
         if (is_admin()) {
@@ -138,14 +179,13 @@ class InclusiveAiDescriptions {
             <h1>Generar Descripciones IA en Lote</h1>
             
             <?php
-            // Obtener estadísticas como antes...
             $all_args = array(
                 'post_type' => 'fotografia',
                 'posts_per_page' => -1,
                 'post_status' => array('publish', 'pending', 'draft')
             );
             $all_posts = get_posts($all_args);
-                
+            
             $empty_args = array(
                 'post_type' => 'fotografia',
                 'posts_per_page' => -1,
@@ -237,7 +277,6 @@ class InclusiveAiDescriptions {
                     
                     <div style="margin: 15px 0; padding: 10px; background: #f0f6fc; border-left: 4px solid #0073aa;">
                         <p><strong>⚠️ Importante:</strong> No cierres ni recargues esta página durante el procesamiento.</p>
-                        <p><strong>Tiempo estimado:</strong> Aproximadamente <?php echo ceil($total_remaining * 2 / 60); ?> minutos (<?php echo $total_remaining; ?> imágenes × 2 segundos).</p>
                     </div>
                     
                     <button type="button" id="start-batch-process" class="button button-primary button-large">
@@ -278,8 +317,6 @@ class InclusiveAiDescriptions {
         
         <script type="text/javascript">
         jQuery(document).ready(function($) {
-            console.log('=== BATCH PROCESS INIT ===');
-            
             // Datos desde PHP
             const allPosts = <?php echo json_encode($processable_posts); ?>;
             const alreadyProcessed = <?php echo json_encode($saved_progress['processed']); ?>;
@@ -289,11 +326,6 @@ class InclusiveAiDescriptions {
             const postsToProcess = allPosts.filter(postId => !alreadyProcessed.includes(postId));
             const totalPosts = postsToProcess.length;
             const totalAlreadyProcessed = alreadyProcessed.length;
-            
-            console.log('Total posts:', allPosts.length);
-            console.log('Ya procesados:', totalAlreadyProcessed);
-            console.log('Por procesar:', totalPosts);
-            console.log('Posts a procesar:', postsToProcess);
             
             // Variables de control
             let isProcessing = false;
@@ -326,8 +358,6 @@ class InclusiveAiDescriptions {
                 currentIndex = 0;
                 startTime = new Date();
                 
-                console.log('Iniciando procesamiento de ' + totalPosts + ' posts restantes');
-                
                 // Mostrar UI
                 $('#batch-progress').show();
                 $('#start-batch-process').hide();
@@ -345,8 +375,6 @@ class InclusiveAiDescriptions {
             
             // Botón de pausar
             $('#stop-batch-process').on('click', function() {
-                console.log('=== PAUSAR ===');
-                
                 if (!confirm('¿Deseas pausar el procesamiento? Podrás continuar más tarde.')) {
                     return;
                 }
@@ -364,15 +392,10 @@ class InclusiveAiDescriptions {
                 $('#start-batch-process').show().text('Continuar Procesamiento');
                 $('#stop-batch-process').hide();
                 $('#reset-batch-process').show();
-                
-                const logMsg = 'Proceso pausado. Procesados: ' + currentIndex + ' de ' + totalPosts;
-                console.log(logMsg);
             });
             
             // Botón de reiniciar
             $('#reset-batch-process').on('click', function() {
-                console.log('=== REINICIAR ===');
-                
                 if (!confirm('¿Estás seguro de que quieres reiniciar desde cero?\nSe perderá todo el progreso guardado.')) {
                     return;
                 }
@@ -386,7 +409,6 @@ class InclusiveAiDescriptions {
                     },
                     success: function(response) {
                         if (response.success) {
-                            alert('Progreso reiniciado. Recargando página...');
                             location.reload();
                         }
                     }
@@ -401,15 +423,13 @@ class InclusiveAiDescriptions {
                     if (!startTime) return;
                     
                     const now = new Date();
-                    const elapsed = Math.floor((now - startTime) / 1000); // segundos
+                    const elapsed = Math.floor((now - startTime) / 1000);
                     
-                    // Calcular tiempo restante estimado
                     const processed = currentIndex;
                     const remaining = totalPosts - processed;
-                    const avgTimePerItem = processed > 0 ? elapsed / processed : 2; // 2 segundos por defecto
+                    const avgTimePerItem = processed > 0 ? elapsed / processed : 7;
                     const estimatedRemaining = Math.floor(remaining * avgTimePerItem);
                     
-                    // Formatear tiempos
                     const elapsedStr = formatTime(elapsed);
                     const remainingStr = formatTime(estimatedRemaining);
                     
@@ -466,9 +486,15 @@ class InclusiveAiDescriptions {
                 
                 // Actualizar UI
                 const progressPercent = ((currentIndex + 1) / totalPosts) * 100;
+                <?php
+                // Obtener el título del post desde PHP
+                $post_title = get_the_title($postId);
+                // Escapar para JavaScript
+                $post_title_js = esc_js($post_title);
+                ?>
                 $('#progress-bar-inner').css('width', progressPercent + '%');
                 $('#progress-text').text('Procesando: ' + (currentIndex + 1) + '/' + totalPosts);
-                $('#progress-status').text('Procesando ID: ' + postId + '...');
+                $('#progress-status').text('Procesando: ' + '<?php echo $post_title_js; ?>' + '...');
                 
                 // Enviar petición AJAX
                 $.ajax({
@@ -480,6 +506,8 @@ class InclusiveAiDescriptions {
                         post_id: postId
                     },
                     success: function(response) {
+                        console.log('Respuesta GPT para ID ' + postId + ':', response);
+
                         let isError = false;
                         
                         // Verificar si es error
