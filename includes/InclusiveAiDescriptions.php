@@ -23,6 +23,7 @@ class InclusiveAiDescriptions {
         add_action('wp_ajax_ai-gen-description', array($this, 'ai_gen_description'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_scripts'));
         add_action('admin_menu', array($this, 'add_batch_page'));
+        add_action('wp_ajax_ai-gen-description-batch', array($this, 'ai_gen_description'));
     }
 
     //Renders a button that generates an AI-based description for the image
@@ -135,11 +136,9 @@ class InclusiveAiDescriptions {
         ?>
         <div class="wrap">
             <h1>Generar Descripciones IA en Lote</h1>
-            <p>Página en construcción...</p>
-            <h2>Estadísticas</h2>
-                
+            
             <?php
-            // Obtener todas las fotografías
+            // Obtener estadísticas como antes...
             $all_args = array(
                 'post_type' => 'fotografia',
                 'posts_per_page' => -1,
@@ -147,13 +146,12 @@ class InclusiveAiDescriptions {
             );
             $all_posts = get_posts($all_args);
                 
-            //Empty description posts
             $empty_args = array(
                 'post_type' => 'fotografia',
                 'posts_per_page' => -1,
                 'post_status' => array('publish', 'pending', 'draft'),
                 'meta_query' => array(
-                'relation' => 'OR',
+                    'relation' => 'OR',
                     array(
                         'key' => 'descripcion_ia',
                         'value' => '',
@@ -162,24 +160,44 @@ class InclusiveAiDescriptions {
                     array(
                         'key' => 'descripcion_ia',
                         'compare' => 'NOT EXISTS'
-                        )
                     )
-                );
+                )
+            );
+            
             $empty_posts = get_posts($empty_args);
-                
-            // Obtener fotografías SIN imagen destacada
+            
+            $processable_posts = array();
             $no_featured = array();
+            
             foreach($empty_posts as $post) {
-                if(!has_post_thumbnail($post->ID)) {
+                if(has_post_thumbnail($post->ID)) {
+                    $processable_posts[] = $post->ID;
+                } else {
                     $no_featured[] = $post;
                 }
             }
                 
             $total_all = count($all_posts);
             $total_empty = count($empty_posts);
-            $total_with_featured = $total_empty - count($no_featured);
+            $total_with_featured = count($processable_posts);
+            
+            // Obtener progreso guardado de la base de datos
+            $saved_progress = get_option('ai_batch_progress', array(
+                'processed' => array(),
+                'current_index' => 0,
+                'successful' => 0,
+                'failed' => 0,
+                'start_time' => null,
+                'last_update' => null
+            ));
+            
+            // Filtrar posts ya procesados
+            $remaining_posts = array_diff($processable_posts, $saved_progress['processed']);
+            $total_remaining = count($remaining_posts);
+            $total_processed = count($saved_progress['processed']);
             ?>
-
+            
+            <h2>Estadísticas</h2>
             <table class="widefat">
                 <tbody>
                     <tr>
@@ -188,7 +206,7 @@ class InclusiveAiDescriptions {
                     </tr>
                     <tr>
                         <td><strong>Fotografías sin descripción IA:</strong></td>
-                            <td><?php echo $total_empty; ?></td>
+                        <td><?php echo $total_empty; ?></td>
                     </tr>
                     <tr>
                         <td><strong>Con imagen destacada (procesables):</strong></td>
@@ -198,110 +216,377 @@ class InclusiveAiDescriptions {
                         <td><strong>Sin imagen destacada:</strong></td>
                         <td><?php echo count($no_featured); ?></td>
                     </tr>
+                    <tr>
+                        <td><strong>Ya procesadas:</strong></td>
+                        <td id="already-processed"><?php echo $total_processed; ?></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Restantes por procesar:</strong></td>
+                        <td id="remaining-to-process" style="font-weight: bold; color: #0073aa;"><?php echo $total_remaining; ?></td>
+                    </tr>
                 </tbody>
             </table>
+            
             <?php if($total_with_featured > 0): ?>
                 <div id="batch-process-container" style="margin-top: 20px;">
                     <h3>Procesamiento en Lote</h3>
-                    <p>Se generarán descripciones IA para <?php echo $total_with_featured; ?> fotografías.</p>
+                    <p>
+                        Se generarán descripciones IA para <strong><?php echo $total_remaining; ?></strong> fotografías 
+                        (ya se procesaron <?php echo $total_processed; ?> de <?php echo $total_with_featured; ?>).
+                    </p>
+                    
+                    <div style="margin: 15px 0; padding: 10px; background: #f0f6fc; border-left: 4px solid #0073aa;">
+                        <p><strong>⚠️ Importante:</strong> No cierres ni recargues esta página durante el procesamiento.</p>
+                        <p><strong>Tiempo estimado:</strong> Aproximadamente <?php echo ceil($total_remaining * 2 / 60); ?> minutos (<?php echo $total_remaining; ?> imágenes × 2 segundos).</p>
+                    </div>
                     
                     <button type="button" id="start-batch-process" class="button button-primary button-large">
-                        Iniciar Procesamiento en Lote
+                        <?php echo $total_processed > 0 ? 'Continuar Procesamiento' : 'Iniciar Procesamiento en Lote'; ?>
                     </button>
                     
                     <button type="button" id="stop-batch-process" class="button button-secondary" style="display: none;">
-                        Detener Procesamiento
+                        Pausar Procesamiento
+                    </button>
+                    
+                    <button type="button" id="reset-batch-process" class="button button-link" 
+                            style="margin-left: 10px;<?php echo $total_processed == 0 ? 'display:none;' : ''; ?>">
+                        Reiniciar desde cero
                     </button>
                     
                     <div id="batch-progress" style="margin-top: 20px; display: none;">
                         <div class="progress-bar" style="width: 100%; background-color: #f1f1f1; border-radius: 3px;">
                             <div id="progress-bar-inner" style="width: 0%; height: 20px; background-color: #0073aa; border-radius: 3px; transition: width 0.3s;"></div>
                         </div>
-                        <p id="progress-text">Procesando: 0/<?php echo $total_with_featured; ?></p>
-                        <p id="progress-status">Preparando...</p>
-                        <div id="batch-results" style="margin-top: 20px;"></div>
+                        <p id="progress-text">Procesando: 0/<?php echo $total_remaining; ?></p>
+                        <p id="progress-status">Esperando inicio...</p>
+                        <p id="progress-time">Tiempo transcurrido: 00:00:00 | Tiempo estimado restante: --:--:--</p>
+                        
+                        <div id="batch-results" style="margin-top: 20px; max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #f9f9f9;"></div>
+                    </div>
+                    
+                    <div id="completed-message" class="notice notice-success" style="margin-top: 20px; <?php echo $total_remaining == 0 ? '' : 'display: none;'; ?>">
+                        <p>✅ <strong>¡Todo completado!</strong> Todas las <?php echo $total_with_featured; ?> fotografías han sido procesadas.</p>
+                        <p><a href="javascript:location.reload()">Recargar página</a> para ver estadísticas actualizadas.</p>
                     </div>
                 </div>
-                <?php else: ?>
+            <?php else: ?>
                 <div class="notice notice-success">
                     <p>¡Todas las fotografías ya tienen descripción IA o no tienen imagen destacada!</p>
                 </div>
-                <?php endif; ?>
-            </div>
+            <?php endif; ?>
         </div>
         
         <script type="text/javascript">
         jQuery(document).ready(function($) {
-            let processing = false;
-            let currentIndex = 0;
-            let postsToProcess = <?php echo json_encode(array_map(function($p) { return $p->ID; }, array_filter($empty_posts, function($p) { return has_post_thumbnail($p->ID); }))); ?>;
+            console.log('=== BATCH PROCESS INIT ===');
             
+            // Datos desde PHP
+            const allPosts = <?php echo json_encode($processable_posts); ?>;
+            const alreadyProcessed = <?php echo json_encode($saved_progress['processed']); ?>;
+            const savedIndex = <?php echo intval($saved_progress['current_index']); ?>;
+            
+            // Filtrar posts ya procesados
+            const postsToProcess = allPosts.filter(postId => !alreadyProcessed.includes(postId));
+            const totalPosts = postsToProcess.length;
+            const totalAlreadyProcessed = alreadyProcessed.length;
+            
+            console.log('Total posts:', allPosts.length);
+            console.log('Ya procesados:', totalAlreadyProcessed);
+            console.log('Por procesar:', totalPosts);
+            console.log('Posts a procesar:', postsToProcess);
+            
+            // Variables de control
+            let isProcessing = false;
+            let currentIndex = 0;
+            let successfulCount = 0;
+            let failedCount = 0;
+            let startTime = null;
+            let timerInterval = null;
+            
+            // Actualizar contadores desde datos guardados
+            successfulCount = <?php echo intval($saved_progress['successful']); ?>;
+            failedCount = <?php echo intval($saved_progress['failed']); ?>;
+            
+            // Botón de inicio/continuar
             $('#start-batch-process').on('click', function() {
-                if(postsToProcess.length === 0) {
+                console.log('=== INICIAR/CONTINUAR ===');
+                
+                if (isProcessing) {
+                    alert('Ya se está procesando');
+                    return;
+                }
+                
+                if (totalPosts === 0) {
                     alert('No hay fotografías para procesar');
                     return;
                 }
                 
-                processing = true;
+                // Iniciar procesamiento
+                isProcessing = true;
                 currentIndex = 0;
+                startTime = new Date();
                 
+                console.log('Iniciando procesamiento de ' + totalPosts + ' posts restantes');
+                
+                // Mostrar UI
                 $('#batch-progress').show();
                 $('#start-batch-process').hide();
                 $('#stop-batch-process').show();
-                $('#batch-results').html('<p>Iniciando...</p>');
+                $('#reset-batch-process').hide();
+                $('#batch-results').html('<div class="notice notice-info">Iniciando procesamiento por lotes...</div>');
+                $('#progress-status').text('Preparando...');
                 
-                processNextPost();
+                // Iniciar temporizador
+                startTimer();
+                
+                // Iniciar procesamiento
+                setTimeout(processNextPost, 500);
             });
             
+            // Botón de pausar
             $('#stop-batch-process').on('click', function() {
-                processing = false;
-                $('#progress-status').text('Proceso detenido por el usuario');
-                $('#start-batch-process').show();
-                $('#stop-batch-process').hide();
-            });
-            
-            function processNextPost() {
-                if(!processing || currentIndex >= postsToProcess.length) {
-                    finishProcessing();
+                console.log('=== PAUSAR ===');
+                
+                if (!confirm('¿Deseas pausar el procesamiento? Podrás continuar más tarde.')) {
                     return;
                 }
                 
-                const postId = postsToProcess[currentIndex];
-                currentIndex++;
+                isProcessing = false;
+                if (timerInterval) {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                }
                 
-                const progressPercent = (currentIndex / postsToProcess.length) * 100;
-                $('#progress-bar-inner').css('width', progressPercent + '%');
-                $('#progress-text').text('Procesando: ' + currentIndex + '/' + postsToProcess.length);
-                $('#progress-status').text('Generando descripción para ID: ' + postId);
+                // Guardar progreso actual
+                saveProgress();
+                
+                $('#progress-status').html('<strong>Proceso pausado</strong>');
+                $('#start-batch-process').show().text('Continuar Procesamiento');
+                $('#stop-batch-process').hide();
+                $('#reset-batch-process').show();
+                
+                const logMsg = 'Proceso pausado. Procesados: ' + currentIndex + ' de ' + totalPosts;
+                console.log(logMsg);
+            });
+            
+            // Botón de reiniciar
+            $('#reset-batch-process').on('click', function() {
+                console.log('=== REINICIAR ===');
+                
+                if (!confirm('¿Estás seguro de que quieres reiniciar desde cero?\nSe perderá todo el progreso guardado.')) {
+                    return;
+                }
                 
                 $.ajax({
                     url: ajaxurl,
                     type: 'POST',
                     data: {
-                        action: 'ai-gen-description-batch',
-                        post_id: postId
+                        action: 'ai-reset-batch-progress',
+                        nonce: '<?php echo wp_create_nonce("ai_reset_batch"); ?>'
                     },
                     success: function(response) {
-                        $('#batch-results').prepend(
-                            '<div style="margin: 5px 0; padding: 5px; background: #f1f1f1;">ID ' + postId + ': ' + 
-                            (response.success ? '✓ Completado' : '✗ Error') + '</div>'
-                        );
-                        
-                        const delay = 1500;
-                        setTimeout(processNextPost, delay);
+                        if (response.success) {
+                            alert('Progreso reiniciado. Recargando página...');
+                            location.reload();
+                        }
+                    }
+                });
+            });
+            
+            // Función para iniciar temporizador
+            function startTimer() {
+                if (timerInterval) clearInterval(timerInterval);
+                
+                timerInterval = setInterval(function() {
+                    if (!startTime) return;
+                    
+                    const now = new Date();
+                    const elapsed = Math.floor((now - startTime) / 1000); // segundos
+                    
+                    // Calcular tiempo restante estimado
+                    const processed = currentIndex;
+                    const remaining = totalPosts - processed;
+                    const avgTimePerItem = processed > 0 ? elapsed / processed : 2; // 2 segundos por defecto
+                    const estimatedRemaining = Math.floor(remaining * avgTimePerItem);
+                    
+                    // Formatear tiempos
+                    const elapsedStr = formatTime(elapsed);
+                    const remainingStr = formatTime(estimatedRemaining);
+                    
+                    $('#progress-time').text(
+                        'Tiempo transcurrido: ' + elapsedStr + 
+                        ' | Tiempo estimado restante: ' + remainingStr
+                    );
+                }, 1000);
+            }
+            
+            // Función para formatear tiempo
+            function formatTime(seconds) {
+                const hours = Math.floor(seconds / 3600);
+                const minutes = Math.floor((seconds % 3600) / 60);
+                const secs = seconds % 60;
+                
+                return [
+                    hours.toString().padStart(2, '0'),
+                    minutes.toString().padStart(2, '0'),
+                    secs.toString().padStart(2, '0')
+                ].join(':');
+            }
+            
+            // Función para guardar progreso
+            function saveProgress() {
+                const processedPosts = alreadyProcessed.concat(postsToProcess.slice(0, currentIndex));
+                
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'ai-save-batch-progress',
+                        processed: processedPosts,
+                        current_index: currentIndex,
+                        successful: successfulCount,
+                        failed: failedCount,
+                        nonce: '<?php echo wp_create_nonce("ai_save_batch"); ?>'
                     }
                 });
             }
             
+            // Función para procesar un post
+            function processNextPost() {
+                if (!isProcessing) {
+                    return;
+                }
+                
+                if (currentIndex >= totalPosts) {
+                    finishProcessing();
+                    return;
+                }
+                
+                const postId = postsToProcess[currentIndex];
+                
+                // Actualizar UI
+                const progressPercent = ((currentIndex + 1) / totalPosts) * 100;
+                $('#progress-bar-inner').css('width', progressPercent + '%');
+                $('#progress-text').text('Procesando: ' + (currentIndex + 1) + '/' + totalPosts);
+                $('#progress-status').text('Procesando ID: ' + postId + '...');
+                
+                // Enviar petición AJAX
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    dataType: 'text',
+                    data: {
+                        action: 'ai-gen-description',
+                        post_id: postId
+                    },
+                    success: function(response) {
+                        let isError = false;
+                        
+                        // Verificar si es error
+                        if (!response || 
+                            response.includes('No se ha podido procesar') || 
+                            response.includes('error') || 
+                            response.includes('Error') ||
+                            response.trim() === '') {
+                            isError = true;
+                            failedCount++;
+                        } else {
+                            successfulCount++;
+                        }
+                        
+                        // Añadir resultado
+                        const resultDiv = $('<div>')
+                            .css({
+                                'margin': '5px 0',
+                                'padding': '8px',
+                                'border-left': '4px solid ' + (isError ? '#dc3232' : '#46b450'),
+                                'background': isError ? '#ffebee' : '#e8f5e9'
+                            })
+                            .html(
+                                '<strong>ID ' + postId + ':</strong> ' +
+                                '<span style="color: ' + (isError ? '#dc3232' : '#46b450') + '">' +
+                                (isError ? '✗ Error' : '✓ Completado') + '</span>'
+                            );
+                        
+                        $('#batch-results').prepend(resultDiv);
+                        
+                        // Guardar progreso cada 10 imágenes
+                        if ((currentIndex + 1) % 10 === 0) {
+                            saveProgress();
+                        }
+                        
+                        // Incrementar y continuar
+                        currentIndex++;
+                        
+                        if (isProcessing && currentIndex < totalPosts) {
+                            // Esperar 1.5 segundos (puedes ajustar esto)
+                            setTimeout(processNextPost, 1500);
+                        } else {
+                            finishProcessing();
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        failedCount++;
+                        
+                        const resultDiv = $('<div>')
+                            .css({
+                                'margin': '5px 0',
+                                'padding': '8px',
+                                'border-left': '4px solid #dc3232',
+                                'background': '#ffebee'
+                            })
+                            .html(
+                                '<strong>ID ' + postId + ':</strong> ' +
+                                '<span style="color: #dc3232">✗ Error AJAX</span><br>' +
+                                '<small>' + error + '</small>'
+                            );
+                        
+                        $('#batch-results').prepend(resultDiv);
+                        
+                        currentIndex++;
+                        
+                        if (isProcessing && currentIndex < totalPosts) {
+                            setTimeout(processNextPost, 1500);
+                        } else {
+                            finishProcessing();
+                        }
+                    }
+                });
+            }
+            
+            // Función para finalizar
             function finishProcessing() {
-                processing = false;
-                $('#progress-status').html('<strong>¡Proceso completado!</strong>');
-                $('#start-batch-process').show().text('Reiniciar Procesamiento');
+                console.log('=== FINALIZANDO ===');
+                isProcessing = false;
+                
+                if (timerInterval) {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                }
+                
+                // Guardar progreso final
+                saveProgress();
+                
+                const totalProcessed = successfulCount + failedCount;
+                const message = '¡Proceso completado! ' + 
+                            successfulCount + ' éxitos, ' + 
+                            failedCount + ' errores.';
+                
+                $('#progress-status').html('<strong>' + message + '</strong>');
+                $('#start-batch-process').hide();
                 $('#stop-batch-process').hide();
+                $('#reset-batch-process').show();
+                $('#completed-message').show();
+                
+                // Mostrar mensaje final
+                $('#batch-results').prepend(
+                    '<div class="notice notice-' + (failedCount === 0 ? 'success' : (successfulCount === 0 ? 'error' : 'warning')) + '">' +
+                    '<p><strong>' + message + '</strong></p>' +
+                    '</div>'
+                );
             }
         });
         </script>
         <?php
     }
-
 }
