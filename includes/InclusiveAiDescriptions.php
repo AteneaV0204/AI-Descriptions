@@ -177,14 +177,14 @@ class InclusiveAiDescriptions {
             $all_args = array(
                 'post_type' => 'fotografia',
                 'posts_per_page' => -1,
-                'post_status' => array('publish', 'pending', 'draft')
+                'post_status' => array('publish')
             );
             $all_posts = get_posts($all_args);
             
             $empty_args = array(
                 'post_type' => 'fotografia',
                 'posts_per_page' => -1,
-                'post_status' => array('publish', 'pending', 'draft'),
+                'post_status' => array('publish'),
                 'meta_query' => array(
                     'relation' => 'OR',
                     array(
@@ -232,7 +232,7 @@ class InclusiveAiDescriptions {
             $total_processed = count($saved_progress['processed']);
             ?>
             
-            <h2>Estadísticas</h2>
+            <h2>Estadísticas (Solo publicadas)</h2>
             <table class="widefat">
                 <tbody>
                     <tr>
@@ -472,13 +472,9 @@ class InclusiveAiDescriptions {
                 const postId = postsToProcess[currentIndex];
                 const progressPercent = ((currentIndex + 1) / totalPosts) * 100;
                 const TIMEOUT = 1500;
-                <?php
-                $post_title = get_the_title($postId);
-                $post_title_js = esc_js($post_title);
-                ?>
+                
                 $('#progress-bar-inner').css('width', progressPercent + '%');
                 $('#progress-text').text('Procesando: ' + (currentIndex + 1) + '/' + totalPosts);
-                $('#progress-status').text('Procesando ID: ' + postId + '...');
                 
                 $.ajax({
                     url: ajaxurl,
