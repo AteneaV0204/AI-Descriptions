@@ -5,7 +5,7 @@ class InclusiveAiDescriptions {
     //Variables
     private static $instance;
     private static $post_type = 'fotografia';
-    private static $apiKey = 'aaaaaaaaaaa';
+    private static $apiKey = 'apikey';
     private static $model = 'gpt-4o';
 
     //Function for singleton instances
@@ -71,7 +71,7 @@ class InclusiveAiDescriptions {
                            }]
                         }
                     ]}';
-            echo $this->GPTRequest($url, $key, $body);
+            $response = $this->GPTRequest($url, $key, $body);
 
             if ($response && !empty($response)) {
                 update_field('descripcion_ia', $response, $post_id);
@@ -93,10 +93,7 @@ class InclusiveAiDescriptions {
         curl_setopt_array($curl, array(
             CURLOPT_URL => $url,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_ENCODING => '',
-            CURLOPT_MAXREDIRS => 10,
             CURLOPT_TIMEOUT => 0,
-            CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
             CURLOPT_CUSTOMREQUEST => 'POST',
             CURLOPT_POSTFIELDS => $body,
@@ -118,7 +115,7 @@ class InclusiveAiDescriptions {
         return $result;
     }
 
-    // Función para guardar progreso del batch
+    // Saves batch progress
     public function save_batch_progress() {
         check_ajax_referer('ai_save_batch', 'nonce');
         
@@ -137,12 +134,10 @@ class InclusiveAiDescriptions {
         );
         
         update_option('ai_batch_progress', $progress, false);
-        
-        error_log('Progreso guardado: ' . count($processed_posts) . ' posts procesados');
         wp_send_json_success(array('saved' => count($processed_posts)));
     }
 
-    // Función para reiniciar progreso del batch
+    // Resets batch progress
     public function reset_batch_progress() {
         check_ajax_referer('ai_reset_batch', 'nonce');
         
@@ -317,48 +312,44 @@ class InclusiveAiDescriptions {
         
         <script type="text/javascript">
         jQuery(document).ready(function($) {
-            // Datos desde PHP
             const allPosts = <?php echo json_encode($processable_posts); ?>;
             const alreadyProcessed = <?php echo json_encode($saved_progress['processed']); ?>;
             const savedIndex = <?php echo intval($saved_progress['current_index']); ?>;
             
-            // Filtrar posts ya procesados
+            // Filter posts already processed
             const postsToProcess = allPosts.filter(postId => !alreadyProcessed.includes(postId));
             const totalPosts = postsToProcess.length;
             const totalAlreadyProcessed = alreadyProcessed.length;
             
-            // Variables de control
+            // Initialize variables
             let isProcessing = false;
             let currentIndex = 0;
             let successfulCount = 0;
             let failedCount = 0;
             let startTime = null;
             let timerInterval = null;
+
+            const MS_TO_SECOND = 1000;
+            const S_TO_MIN = 60;
+            const S_TO_HOUR = 3600;
+            const MS_PER_BATCH = 500;
             
-            // Actualizar contadores desde datos guardados
+            // Update counters from saved data
             successfulCount = <?php echo intval($saved_progress['successful']); ?>;
             failedCount = <?php echo intval($saved_progress['failed']); ?>;
             
-            // Botón de inicio/continuar
+            // Start/Continue button
             $('#start-batch-process').on('click', function() {
-                console.log('=== INICIAR/CONTINUAR ===');
-                
-                if (isProcessing) {
-                    alert('Ya se está procesando');
-                    return;
-                }
-                
                 if (totalPosts === 0) {
                     alert('No hay fotografías para procesar');
                     return;
                 }
                 
-                // Iniciar procesamiento
                 isProcessing = true;
                 currentIndex = 0;
                 startTime = new Date();
                 
-                // Mostrar UI
+                // Show UI
                 $('#batch-progress').show();
                 $('#start-batch-process').hide();
                 $('#stop-batch-process').show();
@@ -366,18 +357,13 @@ class InclusiveAiDescriptions {
                 $('#batch-results').html('<div class="notice notice-info">Iniciando procesamiento por lotes...</div>');
                 $('#progress-status').text('Preparando...');
                 
-                // Iniciar temporizador
                 startTimer();
-                
-                // Iniciar procesamiento
-                setTimeout(processNextPost, 500);
+                setTimeout(processNextPost, MS_PER_BATCH);
             });
             
-            // Botón de pausar
+            // Pause
             $('#stop-batch-process').on('click', function() {
-                if (!confirm('¿Deseas pausar el procesamiento? Podrás continuar más tarde.')) {
-                    return;
-                }
+                alert('Procedimiento pausado, puedes continuar cuando quieras');
                 
                 isProcessing = false;
                 if (timerInterval) {
@@ -385,7 +371,7 @@ class InclusiveAiDescriptions {
                     timerInterval = null;
                 }
                 
-                // Guardar progreso actual
+                // Save progress
                 saveProgress();
                 
                 $('#progress-status').html('<strong>Proceso pausado</strong>');
@@ -394,7 +380,7 @@ class InclusiveAiDescriptions {
                 $('#reset-batch-process').show();
             });
             
-            // Botón de reiniciar
+            // Reset
             $('#reset-batch-process').on('click', function() {
                 if (!confirm('¿Estás seguro de que quieres reiniciar desde cero?\nSe perderá todo el progreso guardado.')) {
                     return;
@@ -415,7 +401,7 @@ class InclusiveAiDescriptions {
                 });
             });
             
-            // Función para iniciar temporizador
+            // Init timer
             function startTimer() {
                 if (timerInterval) clearInterval(timerInterval);
                 
@@ -423,11 +409,12 @@ class InclusiveAiDescriptions {
                     if (!startTime) return;
                     
                     const now = new Date();
-                    const elapsed = Math.floor((now - startTime) / 1000);
+                    const elapsed = Math.floor((now - startTime) / MS_TO_SECOND);
+                    const AVG_SECONDS_PROCESS = 7; // 7 seconds to process a description for a post
                     
                     const processed = currentIndex;
                     const remaining = totalPosts - processed;
-                    const avgTimePerItem = processed > 0 ? elapsed / processed : 7;
+                    const avgTimePerItem = processed > 0 ? elapsed / processed : AVG_SECONDS_PROCESS;
                     const estimatedRemaining = Math.floor(remaining * avgTimePerItem);
                     
                     const elapsedStr = formatTime(elapsed);
@@ -437,14 +424,14 @@ class InclusiveAiDescriptions {
                         'Tiempo transcurrido: ' + elapsedStr + 
                         ' | Tiempo estimado restante: ' + remainingStr
                     );
-                }, 1000);
+                }, MS_TO_SECOND);
             }
             
-            // Función para formatear tiempo
+            // Format time
             function formatTime(seconds) {
-                const hours = Math.floor(seconds / 3600);
-                const minutes = Math.floor((seconds % 3600) / 60);
-                const secs = seconds % 60;
+                const hours = Math.floor(seconds / S_TO_HOUR);
+                const minutes = Math.floor((seconds % S_TO_HOUR) / S_TO_MIN);
+                const secs = seconds % S_TO_MIN;
                 
                 return [
                     hours.toString().padStart(2, '0'),
@@ -453,7 +440,7 @@ class InclusiveAiDescriptions {
                 ].join(':');
             }
             
-            // Función para guardar progreso
+            // Save progress
             function saveProgress() {
                 const processedPosts = alreadyProcessed.concat(postsToProcess.slice(0, currentIndex));
                 
@@ -471,7 +458,7 @@ class InclusiveAiDescriptions {
                 });
             }
             
-            // Función para procesar un post
+            // Process a post
             function processNextPost() {
                 if (!isProcessing) {
                     return;
@@ -483,20 +470,16 @@ class InclusiveAiDescriptions {
                 }
                 
                 const postId = postsToProcess[currentIndex];
-                
-                // Actualizar UI
                 const progressPercent = ((currentIndex + 1) / totalPosts) * 100;
+                const TIMEOUT = 1500;
                 <?php
-                // Obtener el título del post desde PHP
                 $post_title = get_the_title($postId);
-                // Escapar para JavaScript
                 $post_title_js = esc_js($post_title);
                 ?>
                 $('#progress-bar-inner').css('width', progressPercent + '%');
                 $('#progress-text').text('Procesando: ' + (currentIndex + 1) + '/' + totalPosts);
-                $('#progress-status').text('Procesando: ' + '<?php echo $post_title_js; ?>' + '...');
+                $('#progress-status').text('Procesando ID: ' + postId + '...');
                 
-                // Enviar petición AJAX
                 $.ajax({
                     url: ajaxurl,
                     type: 'POST',
@@ -506,8 +489,6 @@ class InclusiveAiDescriptions {
                         post_id: postId
                     },
                     success: function(response) {
-                        console.log('Respuesta GPT para ID ' + postId + ':', response);
-
                         let isError = false;
                         
                         // Verificar si es error
@@ -522,7 +503,7 @@ class InclusiveAiDescriptions {
                             successfulCount++;
                         }
                         
-                        // Añadir resultado
+                        // Add result log in page
                         const resultDiv = $('<div>')
                             .css({
                                 'margin': '5px 0',
@@ -538,17 +519,15 @@ class InclusiveAiDescriptions {
                         
                         $('#batch-results').prepend(resultDiv);
                         
-                        // Guardar progreso cada 10 imágenes
-                        if ((currentIndex + 1) % 10 === 0) {
+                        // Save progress every 3 posts
+                        if ((currentIndex + 1) % 3 === 0) {
                             saveProgress();
                         }
                         
-                        // Incrementar y continuar
                         currentIndex++;
                         
                         if (isProcessing && currentIndex < totalPosts) {
-                            // Esperar 1.5 segundos (puedes ajustar esto)
-                            setTimeout(processNextPost, 1500);
+                            setTimeout(processNextPost, TIMEOUT);
                         } else {
                             finishProcessing();
                         }
@@ -574,7 +553,7 @@ class InclusiveAiDescriptions {
                         currentIndex++;
                         
                         if (isProcessing && currentIndex < totalPosts) {
-                            setTimeout(processNextPost, 1500);
+                            setTimeout(processNextPost, TIMEOUT);
                         } else {
                             finishProcessing();
                         }
@@ -582,9 +561,8 @@ class InclusiveAiDescriptions {
                 });
             }
             
-            // Función para finalizar
+            // Finish processing
             function finishProcessing() {
-                console.log('=== FINALIZANDO ===');
                 isProcessing = false;
                 
                 if (timerInterval) {
@@ -592,7 +570,6 @@ class InclusiveAiDescriptions {
                     timerInterval = null;
                 }
                 
-                // Guardar progreso final
                 saveProgress();
                 
                 const totalProcessed = successfulCount + failedCount;
@@ -601,12 +578,13 @@ class InclusiveAiDescriptions {
                             failedCount + ' errores.';
                 
                 $('#progress-status').html('<strong>' + message + '</strong>');
-                $('#start-batch-process').hide();
+                if(totalPosts === totalProcessed){
+                    $('#start-batch-process').hide();
+                }
                 $('#stop-batch-process').hide();
                 $('#reset-batch-process').show();
                 $('#completed-message').show();
                 
-                // Mostrar mensaje final
                 $('#batch-results').prepend(
                     '<div class="notice notice-' + (failedCount === 0 ? 'success' : (successfulCount === 0 ? 'error' : 'warning')) + '">' +
                     '<p><strong>' + message + '</strong></p>' +
