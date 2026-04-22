@@ -5,7 +5,7 @@ class InclusiveAiDescriptions {
     //Variables
     private static $instance;
     private static $post_type = 'fotografia';
-    private static $apiKey = 'apikey';
+    private static $apiKey = 'a';
     private static $model = 'gpt-4o';
 
     //Function for singleton instances
@@ -43,7 +43,7 @@ class InclusiveAiDescriptions {
             $post_id = intval($_POST['post_id']);
         }
         $imagen = get_post_thumbnail_id($post_id);
-        $imgData = wp_get_attachment_image_src($imagen, 'full');
+        $imgData = wp_get_attachment_image_src($imagen, 'large');
         $imgUrl = $imgData ? $imgData[0] : '';
 
         try {
